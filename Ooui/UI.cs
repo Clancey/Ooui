@@ -584,7 +584,7 @@ namespace Ooui
             // Set the element's dimensions
             //
             var query =
-                (from part in listenerContext.Request.Url.Query.Split (new[] { '?', '&' })
+                (from part in uri.Query.Split (new[] { '?', '&' })
                  where part.Length > 0
                  let kvs = part.Split ('=')
                  where kvs.Length == 2
