@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Net;
 using System.Runtime.InteropServices;
+using Fleck;
 
 namespace Ooui
 {
@@ -51,6 +52,18 @@ namespace Ooui
                 }
             }
         }
+
+        static int webSocketPort = 8081;
+        public static int WebSocketPort {
+            get => webSocketPort;
+            set {
+                if (webSocketPort != value) {
+                    webSocketPort = value;
+                    Restart ();
+                }
+            }
+        }
+
         static bool serverEnabled = true;
         public static bool ServerEnabled {
             get => serverEnabled;
@@ -233,6 +246,7 @@ namespace Ooui
         static async Task RunAsync (string listenerPrefix, CancellationToken token)
         {
             HttpListener listener = null;
+            WebSocketServer webSocket = null;
             var wait = 5;
 
             started.Reset ();
@@ -241,6 +255,30 @@ namespace Ooui
                     listener = new HttpListener ();
                     listener.Prefixes.Add (listenerPrefix);
                     listener.Start ();
+                    FleckLog.LogAction = (level, message, ex) => {
+                        switch (level) {
+                            case LogLevel.Debug:
+                                Console.WriteLine (message, ex);
+                                break;
+                            case LogLevel.Error:
+                                Console.WriteLine (message, ex);
+                                break;
+                            case LogLevel.Warn:
+                                Console.WriteLine (message, ex);
+                                break;
+                            default:
+                                Console.WriteLine (message, ex);
+                                break;
+                        }
+                    };
+                    webSocket = new WebSocketServer($"ws://0.0.0.0:{WebSocketPort}/");
+                    webSocket.SupportedSubProtocols = new [] { "ooui"};
+
+                    webSocket.Start ((IWebSocketConnection obj) => {
+                        obj.OnOpen = () => {
+                            ProcessWebSocketRequest (obj, token);
+                        };
+                    });
                     started.Set ();
                 }
                 catch (System.Net.Sockets.SocketException ex) {
@@ -262,12 +300,7 @@ namespace Ooui
 
             while (!token.IsCancellationRequested) {
                 var listenerContext = await listener.GetContextAsync ().ConfigureAwait (false);
-                if (listenerContext.Request.IsWebSocketRequest) {
-                    ProcessWebSocketRequest (listenerContext, token);
-                }
-                else {
-                    ProcessRequest (listenerContext, token);
-                }
+                ProcessRequest (listenerContext, token);
             }
         }
 
@@ -497,21 +530,22 @@ namespace Ooui
 			}
 		}
 
-        static async void ProcessWebSocketRequest (HttpListenerContext listenerContext, CancellationToken serverToken)
+        static async void ProcessWebSocketRequest (IWebSocketConnection webSocketConnection, CancellationToken serverToken)
         {
             //
             // Find the element
             //
-            var url = listenerContext.Request.Url;
-            var path = url.LocalPath;
+            var connection = webSocketConnection.ConnectionInfo;
+            var uri = new Uri ($"ws://{connection.Host}{connection.Path}");
+            var path = uri.LocalPath;
 
             RequestHandler handler;
             var found = false;
             lock (publishedPaths) found = publishedPaths.TryGetValue (path, out handler);
             var elementHandler = handler as ElementHandler;
             if (!found || elementHandler == null) {
-                listenerContext.Response.StatusCode = 404;
-                listenerContext.Response.Close ();
+
+                //TODO: Error
                 return;
             }
 
@@ -525,26 +559,11 @@ namespace Ooui
 					throw new Exception ("Handler returned a null element");
             }
             catch (Exception ex) {
-                listenerContext.Response.StatusCode = 500;
-                listenerContext.Response.Close();
-                Error ("Failed to create element", ex);
-                return;
-            }
 
-            //
-            // Connect the web socket
-            //
-            System.Net.WebSockets.WebSocketContext webSocketContext = null;
-            System.Net.WebSockets.WebSocket webSocket = null;
-            try {
-                webSocketContext = await listenerContext.AcceptWebSocketAsync (subProtocol: "ooui").ConfigureAwait (false);
-                webSocket = webSocketContext.WebSocket;
-                Console.WriteLine ("WEBSOCKET {0}", listenerContext.Request.Url.LocalPath);
-            }
-            catch (Exception ex) {
-                listenerContext.Response.StatusCode = 500;
-                listenerContext.Response.Close();
-                Error ("Failed to accept WebSocket", ex);
+                //TODO: Error
+                //listenerContext.Response.StatusCode = 500;
+                //listenerContext.Response.Close();
+                Error ("Failed to create element", ex);
                 return;
             }
 
@@ -573,7 +592,7 @@ namespace Ooui
             // Create a new session and let it handle everything from here
             //
             try {
-                var session = new WebSocketSession (webSocket, element, disposeElementWhenDone, w, h, Error, serverToken);
+                var session = new FlickWebSocketSession (webSocketConnection, element, disposeElementWhenDone, w, h, Error, serverToken);
                 await session.RunAsync ().ConfigureAwait (false);
             }
             catch (System.Net.WebSockets.WebSocketException ex) when (ex.WebSocketErrorCode == System.Net.WebSockets.WebSocketError.ConnectionClosedPrematurely) {
@@ -583,7 +602,7 @@ namespace Ooui
                 Error ("Web socket failed", ex);
             }
             finally {
-                webSocket?.Dispose ();
+                //webSocket?.Dispose ();
             }
         }
 

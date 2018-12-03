@@ -78,6 +78,7 @@ function ooui (rootElementPath) {
 
     var initialSize = getSize ();
     saveSize (initialSize);
+    
 
     var wsArgs = (rootElementPath.indexOf("?") >= 0 ? "&" : "?") +
         "w=" + initialSize.width + "&h=" + initialSize.height;
@@ -87,7 +88,8 @@ function ooui (rootElementPath) {
         proto = "wss";
     }
 
-    socket = new WebSocket (proto + "://" + document.location.host + rootElementPath + wsArgs, "ooui");
+    //TODO: Replace with a web request to get the WebSocket location;
+    socket = new WebSocket (proto + "://" + document.location.host.replace("8080","8081") + rootElementPath + wsArgs, "ooui");
 
     socket.addEventListener ("open", function (event) {
         console.log ("Web socket opened");
