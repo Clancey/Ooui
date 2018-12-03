@@ -79,17 +79,15 @@ function ooui (rootElementPath) {
     var initialSize = getSize ();
     saveSize (initialSize);
     
+    var xmlHttp = new XMLHttpRequest();
+    xmlHttp.open( "GET", location.protocol + "//" + document.location.host + "/WebSocketUrl" , false ); // false for synchronous request
+    xmlHttp.send( null );
+    
 
     var wsArgs = (rootElementPath.indexOf("?") >= 0 ? "&" : "?") +
         "w=" + initialSize.width + "&h=" + initialSize.height;
 
-    var proto = "ws";
-    if (location.protocol == "https:") {
-        proto = "wss";
-    }
-
-    //TODO: Replace with a web request to get the WebSocket location;
-    socket = new WebSocket (proto + "://" + document.location.host.replace("8080","8081") + rootElementPath + wsArgs, "ooui");
+    socket = new WebSocket (xmlHttp.response + rootElementPath + wsArgs, "ooui");
 
     socket.addEventListener ("open", function (event) {
         console.log ("Web socket opened");

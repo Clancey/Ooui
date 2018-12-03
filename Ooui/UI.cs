@@ -332,6 +332,19 @@ namespace Ooui
                     response.Close ();
                 }
             }
+            else if(path == "/WebSocketUrl")
+            {
+                var protocol = url.Scheme == "https" ? "wss": "ws";
+                var wsUrl = $"{protocol}://{url.Host}:{WebSocketPort}";
+                var bytes=Encoding.UTF8.GetBytes(wsUrl);
+                response.StatusCode = 200;
+                response.ContentLength64 = bytes.LongLength;
+                response.ContentEncoding = Encoding.UTF8;
+                using (var s = response.OutputStream) {
+                    s.Write (bytes, 0, bytes.Length);
+                }
+                response.Close ();
+            }
             else {
                 var found = false;
                 RequestHandler handler;
